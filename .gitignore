@@ -1,16 +1,148 @@
-# Node rules:
-## Grunt intermediate storage (http://gruntjs.com/creating-plugins#storing-task-files)
-.grunt
+#import "FPSDisplay.h"
 
-## Dependency directory
-## Commenting this out is preferred by some people, see
-## https://docs.npmjs.com/misc/faq#should-i-check-my-node_modules-folder-into-git
-node_modules
+#define SCREEN_WIDTH [UIScreen mainScreen].bounds.size.width
+#define SCREEN_HEIGHT [UIScreen mainScreen].bounds.size.height
 
-# Book build output
-_book
+@interface FPSDisplay ()
 
-# eBook build output
-*.epub
-*.mobi
-*.pdf
+@property (strong, nonatomic) UILabel *displayLabel;
+@property (strong, nonatomic) CADisplayLink *link;
+@property (assign, nonatomic) NSInteger count;
+@property (assign, nonatomic) NSTimeInterval lastTime;
+@property (strong, nonatomic) UIFont *font;
+@property (strong, nonatomic) UIFont *subFont;
+
+@end
+
+@implementation FPSDisplay
+
++(void)load {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self shareFPSDisplay];
+    });
+}
+
++ (instancetype)shareFPSDisplay {
+    static FPSDisplay *shareDisplay;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        shareDisplay = [[FPSDisplay alloc] init];
+    });
+    return shareDisplay;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        [self initDisplayLabel];
+    }
+    return self;
+}
+
+- (void)initDisplayLabel {
+    CGFloat labelWidth = [UIScreen mainScreen].bounds.size.width / 2 + 10;
+    CGFloat labelHeight = 6;
+
+    CGFloat labelX = ([UIScreen mainScreen].bounds.size.width - labelWidth) / 2;
+    CGFloat labelY = [UIScreen mainScreen].bounds.size.height - labelHeight - 8; // Adjusted to leave space at the bottom
+
+    CGRect frame = CGRectMake(labelX, labelY, labelWidth, labelHeight);
+    self.displayLabel = [[UILabel alloc] initWithFrame: frame];
+    self.displayLabel.layer.cornerRadius = 12;
+    self.displayLabel.clipsToBounds = YES;
+    self.displayLabel.textAlignment = NSTextAlignmentCenter;
+    self.displayLabel.userInteractionEnabled = NO;
+    self.displayLabel.numberOfLines = 0; // Allow unlimited lines
+    self.displayLabel.lineBreakMode = NSLineBreakByWordWrapping; // Allow word wrapping
+
+    _font = [UIFont fontWithName:@"Menlo" size:14];
+    if (_font) {
+        _subFont = [UIFont fontWithName:@"Menlo" size:4];
+    } else {
+        _font = [UIFont fontWithName:@"Courier" size:14];
+        _subFont = [UIFont fontWithName:@"Courier" size:4];
+    }
+
+    [self initCADisplayLink];
+
+    [[UIApplication sharedApplication].keyWindow addSubview:self.displayLabel];
+}
+
+- (void)initCADisplayLink {
+    self.link = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
+    [self.link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+- (void)tick:(CADisplayLink *)link {
+    if(self.lastTime == 0){
+        self.lastTime = link.timestamp;
+        return;
+    }
+    self.count += 1;
+    NSTimeInterval delta = link.timestamp - _lastTime;
+    if(delta >= 1.f){
+        self.lastTime = link.timestamp;
+        float fps = self.count / delta;
+        self.count = 0;
+        [self updateDisplayLabelText: fps];
+    }
+}
+
+- (void)updateDisplayLabelText: (float) fps {
+    NSMutableString *mustr = [[NSMutableString alloc] init];
+    [mustr appendFormat:@"%@",self.getSystemDate];
+
+    // Get the current hour
+    NSCalendar *calendar = [NSCalendar currentCalendar];
+    NSDateComponents *components = [calendar components:NSCalendarUnitHour fromDate:[NSDate date]];
+    NSInteger hour = [components hour];
+
+    // Determine the greeting based on the current hour
+    NSString *greeting = @"";
+    if (hour >= 6 && hour < 11) {
+        greeting = @"HI!CHÀO BUỔI SÁNG";
+    } else if (hour >= 11 && hour < 13) {
+        greeting = @"HI!CHÀO BUỔI TRƯA";
+    } else if (hour >= 13 && hour < 18) {
+        greeting = @"HI!CHÀO BUỔI CHIỀU";
+    } else if (hour >= 18 && hour < 22) {
+        greeting = @"HI!CHÀO BUỔI TỐi";
+    } else {
+        greeting = @"HƠN 10H RỒI CÚT ĐI NGỦ";
+    }
+
+    // Append the greeting to the label text
+    NSString *labelText = [NSString stringWithFormat:@" 🇻🇳 FINN 🇻🇳 - %@ ", greeting];
+
+    // Update the display label with increased font size
+    self.displayLabel.text = labelText;
+    self.displayLabel.textColor = [UIColor yellowColor];
+
+    // Increase font size by three times
+    CGFloat fontSize = 8.0 ; // Current font size multiplied by 3
+    UIFont *font = [UIFont boldSystemFontOfSize:fontSize];
+    self.displayLabel.font = font;
+
+    // Adjust label size based on the size of the text
+    CGSize size = [labelText boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)
+                                           options:NSStringDrawingUsesLineFragmentOrigin
+                                        attributes:@{NSFontAttributeName: font}
+                                           context:nil].size;
+
+    CGRect frame = self.displayLabel.frame;
+    frame.size.width = size.width;
+    frame.size.height = size.height;
+    frame.origin.x = ([UIScreen mainScreen].bounds.size.width - size.width) / 2; // Center horizontally
+    self.displayLabel.frame = frame;
+}
+
+- (NSString *)getSystemDate {
+    NSDate *currentDate = [NSDate date];
+    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
+
+    [dateFormatter setDateFormat:@"EEEE, dd/MM/yyyy | HH:mm:ss"];
+
+    return [dateFormatter stringFromDate:currentDate];
+}
+
+@end
